@@ -39,6 +39,11 @@ class Lock
     protected $name;
     
     /**
+     * @var boolean
+     */
+    protected $killExpiredProcesses;
+    
+    /**
      * @var integer The time when this lock expires
      */
     protected $expires;
@@ -63,9 +68,11 @@ class Lock
     /**
      * Class constructor, sets the lock name
      */
-    public function __construct($name)
+    public function __construct($name, $killExpiredProcesses = false)
     {
         $this->name = $name;
+        $this->killExpiredProcesses = $killExpiredProcesses;
+        
         if (isset(self::$defaultClient)) {
             $this->client = self::$defaultClient;
         }
@@ -77,6 +84,14 @@ class Lock
     public function setClient(Client $client)
     {
         $this->client = $client;
+    }
+    
+    /**
+     * Setter for killExpiredProcesses
+     */
+    public function setKillExpiredProcesses($value = true)
+    {
+        $this->killExpiredProcesses = true;
     }
     
     /**
@@ -108,7 +123,10 @@ class Lock
                 // failed to acquire. If current value has expired attempt to get the lock
                 $currentValue = $this->client->get($key);
                 
+                // has the current lock expired
                 if ($this->hasLockValueExpired($currentValue)) {
+                    $this->killExpiredProcess($currentValue);
+                    
                     $getsetResult = $this->client->getset($key, $value);
                     if ($this->hasLockValueExpired($getsetResult)) {
                         // still expired therefore lock acquired
@@ -199,5 +217,18 @@ class Lock
     {
         $parts = explode(':', $value);
         return time() > $parts[0];
+    }
+    
+    /**
+     * Kill the expired process (if flag set to true)
+     *
+     * @param string The lock value
+     */
+    public function killExpiredProcess($expiredLockValue)
+    {
+        if ($this->killExpiredProcesses) {
+            list(, $pid) = explode(':', $expiredLockValue);
+            exec("kill $pid");
+        }
     }
 }
