@@ -110,7 +110,6 @@ class Lock
         $retryWaitUsec = abs($retryWaitUsec);
         
         $key = $this->getKey();
-        $acquired = false;
         $attempts = 0;
         
         do {
@@ -118,7 +117,7 @@ class Lock
             
             if ($this->client->setnx($key, $value)) {
                 // lock acquired
-                $acquired = true;
+                return $this->acquired($timeout);
             } else {
                 // failed to acquire. If current value has expired attempt to get the lock
                 $currentValue = $this->client->get($key);
@@ -130,7 +129,7 @@ class Lock
                     $getsetResult = $this->client->getset($key, $value);
                     if ($this->hasLockValueExpired($getsetResult)) {
                         // still expired therefore lock acquired
-                        $acquired = true;
+                        return $this->acquired($timeout);
                     }
                 }
             }
@@ -138,9 +137,9 @@ class Lock
             // sleep then try again
             usleep($retryWaitUsec);
             $attempts++;
-        } while ($attempts < $retryAttempts && !$acquired);
+        } while ($attempts < $retryAttempts);
         
-        return $acquired ? $this->acquired($timeout) : false;
+        return false;
     }
     
     /**
