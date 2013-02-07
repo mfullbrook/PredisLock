@@ -1,0 +1,19 @@
+{
+  "name": "mfullbrook/PredisLock",
+  "description": "PredisLock is small class that implements a locking pattern using Redis. As the name suggests, PredisLock is for use with Predis.",
+  "type": "symfony-bundle",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Mark Fullbrook",
+      "email": "mark.fullbrook@gmail.com"
+    }
+  ],
+  "require": {
+    "symfony/framework-bundle" : "2.1.*",
+    "predis/predis"            : "0.8.*"
+  },
+  "autoload": {
+      "psr-0": {"Mcf": "src/"}
+  }
+}
