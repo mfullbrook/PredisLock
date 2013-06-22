@@ -9,9 +9,10 @@
  * file that was distributed with this source code.
  */
 
-namespace PredisLock;
+namespace Mcf\PredisLock;
 
 use Predis\Client;
+use Symfony\Component\Yaml\Exception\RuntimeException;
 
 /**
  * This class implements the algorithm described in http://redis.io/commands/setnx.
@@ -19,36 +20,36 @@ use Predis\Client;
 class Lock
 {
     /**
-     * @var Predis\Client
+     * @var Client
      */
     protected static $defaultClient;
-    
+
     /**
      * @var string
      */
     protected static $lockPrefix = 'lock:';
-    
+
     /**
-     * @var Predis\Client
+     * @var Client
      */
     protected $client;
-    
+
     /**
      * @var string
      */
     protected $name;
-    
+
     /**
      * @var boolean
      */
     protected $killExpiredProcesses;
-    
+
     /**
      * @var integer The time when this lock expires
      */
     protected $expires;
-    
-    
+
+
     /**
      * Set a default Predis client
      */
@@ -56,7 +57,7 @@ class Lock
     {
         self::$defaultClient = $client;
     }
-    
+
     /**
      * Change the default lock prefix
      */
@@ -64,7 +65,7 @@ class Lock
     {
         self::$lockPrefix = $prefix;
     }
-    
+
     /**
      * Class constructor, sets the lock name
      */
@@ -72,12 +73,12 @@ class Lock
     {
         $this->name = $name;
         $this->killExpiredProcesses = $killExpiredProcesses;
-        
+
         if (isset(self::$defaultClient)) {
             $this->client = self::$defaultClient;
         }
     }
-    
+
     /**
      * Set a Predis client to use
      */
@@ -85,21 +86,21 @@ class Lock
     {
         $this->client = $client;
     }
-    
+
     /**
      * Setter for killExpiredProcesses
      */
     public function setKillExpiredProcesses($value = true)
     {
-        $this->killExpiredProcesses = true;
+        $this->killExpiredProcesses = $value;
     }
-    
+
     /**
      * Attempt to aquire a lock
      *
-     * @param int The duration for which a lock will remain valid
-     * @param int The number of attempts that will be made to acquire the lock
-     * @param int The duration (in micro seconds) between each attempt
+     * @param int $timeout The duration for which a lock will remain valid
+     * @param int $retryAttempts The number of attempts that will be made to acquire the lock
+     * @param int $retryWaitUsec The duration (in micro seconds) between each attempt
      *
      * @return boolean True if the lock was acquired
      */
@@ -108,24 +109,24 @@ class Lock
         $timeout       = abs($timeout);
         $retryAttempts = abs($retryAttempts);
         $retryWaitUsec = abs($retryWaitUsec);
-        
+
         $key = $this->getKey();
         $attempts = 0;
-        
+
         do {
             $value = $this->getLockExpirationValue($timeout);
-            
+
             if ($this->client->setnx($key, $value)) {
                 // lock acquired
                 return $this->acquired($timeout);
             } else {
                 // failed to acquire. If current value has expired attempt to get the lock
                 $currentValue = $this->client->get($key);
-                
+
                 // has the current lock expired
                 if ($this->hasLockValueExpired($currentValue)) {
                     $this->killExpiredProcess($currentValue);
-                    
+
                     $getsetResult = $this->client->getset($key, $value);
                     if ($this->hasLockValueExpired($getsetResult)) {
                         // still expired therefore lock acquired
@@ -133,17 +134,19 @@ class Lock
                     }
                 }
             }
-            
+
             // sleep then try again
             usleep($retryWaitUsec);
             $attempts++;
         } while ($attempts < $retryAttempts);
-        
+
         return false;
     }
-    
+
     /**
      * Record into this object the expiry time
+     *
+     * @param $timeout
      *
      * @return boolean Always returns true
      */
@@ -152,7 +155,7 @@ class Lock
         $this->expires = time() + $timeout + 1;
         return true;
     }
-    
+
     /**
      * Release the lock
      *
@@ -163,7 +166,7 @@ class Lock
         if (!$this->isLocked()) {
             throw new \RuntimeException('Attempting to release a lock that is not held');
         }
-        
+
         // check the expiry has not been reached before deleting the lock
         if (time() < $this->expires) {
             $this->client->del($this->getKey());
@@ -172,7 +175,7 @@ class Lock
             trigger_error(sprintf('A PredisLock was not released before the timeout. Class: %s Lock Name: %s', get_class($this), $this->name), E_USER_WARNING);
         }
     }
-    
+
     /**
      * Do we have a lock?
      * @return boolean
@@ -181,7 +184,7 @@ class Lock
     {
         return isset($this->expires);
     }
-    
+
     /**
      * Get the key used for the lock
      *
@@ -191,12 +194,12 @@ class Lock
     {
         return self::$lockPrefix . $this->name;
     }
-    
+
     /**
      * Get the lock expiration value. Add the timeout to the current time.
      * Process ID also included
      *
-     * @param int The duration (in seconds) when this lock will timeout
+     * @param int $timeout The duration (in seconds) when this lock will timeout
      *
      * @return string
      */
@@ -204,11 +207,11 @@ class Lock
     {
         return sprintf('%d:%d', time() + $timeout + 1, posix_getpid());
     }
-    
+
     /**
      * Determine if a lock value has expired
      *
-     * @param string The lock value
+     * @param string $value The lock value
      *
      * @return boolean
      */
@@ -217,11 +220,11 @@ class Lock
         $parts = explode(':', $value);
         return time() > $parts[0];
     }
-    
+
     /**
      * Kill the expired process (if flag set to true)
      *
-     * @param string The lock value
+     * @param string $expiredLockValue The lock value
      */
     public function killExpiredProcess($expiredLockValue)
     {

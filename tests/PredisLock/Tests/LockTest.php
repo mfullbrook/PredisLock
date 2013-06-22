@@ -11,8 +11,9 @@
 
 namespace PredisLock\Tests;
 
-use PredisLock\Lock;
+use Mcf\PredisLock\Lock;
 use Predis\Client;
+use Symfony\Component\Yaml\Exception\RuntimeException;
 
 /**
  * Expose some protected properties and functions
@@ -213,7 +214,7 @@ class LockTest extends \PHPUnit_Framework_TestCase
     
     /**
      * @covers PredisLock\Lock::release
-     * @expectedException PHPUnit_Framework_Error
+     * @expectedException \PHPUnit_Framework_Error
      * @expectedExceptionMessage A PredisLock was not released before the timeout. Class: PredisLock\Lock Lock Name: test
      */
     public function testReleaseTriggersErrorWhenLockNotReleased()
